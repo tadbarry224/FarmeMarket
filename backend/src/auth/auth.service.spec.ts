@@ -1,4 +1,8 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { Role, type User } from '../generated/prisma/client';
@@ -11,7 +15,14 @@ const PASSWORD = 'motdepasse123';
 describe('AuthService', () => {
   let authService: AuthService;
   let usersService: jest.Mocked<
-    Pick<UsersService, 'findByPhone' | 'findByEmail' | 'create'>
+    Pick<
+      UsersService,
+      | 'findById'
+      | 'findByPhone'
+      | 'findByEmail'
+      | 'create'
+      | 'updatePasswordHash'
+    >
   >;
   let jwtService: JwtService;
   let existingUser: User;
@@ -42,9 +53,11 @@ describe('AuthService', () => {
   beforeEach(() => {
     // La base est simulée : ces tests vérifient uniquement les règles métier d'AuthService
     usersService = {
+      findById: jest.fn().mockResolvedValue(null),
       findByPhone: jest.fn().mockResolvedValue(null),
       findByEmail: jest.fn().mockResolvedValue(null),
       create: jest.fn(),
+      updatePasswordHash: jest.fn(),
     };
     jwtService = new JwtService({ secret: 'secret-de-test-uniquement' });
     authService = new AuthService(
@@ -156,6 +169,54 @@ describe('AuthService', () => {
         authService.login({ identifier: 'nimportequoi', password: PASSWORD }),
       ).rejects.toThrow(new UnauthorizedException('Identifiants invalides.'));
       expect(usersService.findByPhone).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword', () => {
+    beforeEach(() => {
+      usersService.findById.mockResolvedValue(existingUser);
+    });
+
+    it('remplace le mot de passe par une nouvelle empreinte', async () => {
+      await authService.changePassword('user-1', {
+        currentPassword: PASSWORD,
+        newPassword: 'nouveau-mot-de-passe',
+      });
+
+      const [userId, newHash] = usersService.updatePasswordHash.mock.calls[0];
+      expect(userId).toBe('user-1');
+      expect(await argon2.verify(newHash, 'nouveau-mot-de-passe')).toBe(true);
+    });
+
+    it('refuse si le mot de passe actuel est incorrect', async () => {
+      const promise = authService.changePassword('user-1', {
+        currentPassword: 'mauvais-mot-de-passe',
+        newPassword: 'nouveau-mot-de-passe',
+      });
+
+      await expect(promise).rejects.toThrow(BadRequestException);
+      await expect(promise).rejects.toMatchObject({
+        response: {
+          errors: { currentPassword: 'Mot de passe actuel incorrect.' },
+        },
+      });
+      expect(usersService.updatePasswordHash).not.toHaveBeenCalled();
+    });
+
+    it("refuse un nouveau mot de passe identique à l'actuel", async () => {
+      await expect(
+        authService.changePassword('user-1', {
+          currentPassword: PASSWORD,
+          newPassword: PASSWORD,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          errors: {
+            newPassword:
+              "Le nouveau mot de passe doit être différent de l'actuel.",
+          },
+        },
+      });
     });
   });
 });

@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { getRequiredEnv } from '../common/env';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 
 // En dessous, le secret pourrait être deviné par force brute
 const JWT_SECRET_MIN_LENGTH = 32;
@@ -38,6 +41,13 @@ const JWT_EXPIRES_IN_FORMAT = /^\d+[smhd]$/;
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [
+    AuthService,
+    // Guards globaux, exécutés dans cet ordre sur toutes les routes de l'application :
+    // 1. JwtAuthGuard : l'utilisateur est-il connecté ? (sauf routes @Public())
+    // 2. RolesGuard   : a-t-il le rôle demandé par @Roles(...) ?
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
 })
 export class AuthModule {}

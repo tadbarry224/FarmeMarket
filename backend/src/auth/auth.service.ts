@@ -1,5 +1,7 @@
 import {
+  BadRequestException,
   ConflictException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -7,8 +9,10 @@ import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { Prisma, type User } from '../generated/prisma/client';
 import { normalizeGuineaPhone } from '../common/phone';
+import { fieldErrorBody } from '../common/validation';
 import { type PublicUser, toPublicUser } from '../users/public-user';
 import { UsersService } from '../users/users.service';
+import type { ChangePasswordDto } from './dto/change-password.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 import type { JwtPayload } from './jwt-payload';
@@ -35,10 +39,22 @@ export class AuthService {
 
   async register(dto: RegisterDto): Promise<AuthResult> {
     if (await this.usersService.findByPhone(dto.phone)) {
-      throw new ConflictException('Ce numéro de téléphone est déjà utilisé.');
+      throw new ConflictException(
+        fieldErrorBody(
+          HttpStatus.CONFLICT,
+          'phone',
+          'Ce numéro de téléphone est déjà utilisé.',
+        ),
+      );
     }
     if (dto.email && (await this.usersService.findByEmail(dto.email))) {
-      throw new ConflictException('Cette adresse e-mail est déjà utilisée.');
+      throw new ConflictException(
+        fieldErrorBody(
+          HttpStatus.CONFLICT,
+          'email',
+          'Cette adresse e-mail est déjà utilisée.',
+        ),
+      );
     }
 
     let user: User;
@@ -74,6 +90,38 @@ export class AuthService {
     }
 
     return this.buildAuthResult(user);
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      // Compte supprimé alors que son jeton est encore valide
+      throw new UnauthorizedException('Vous devez être connecté.');
+    }
+
+    if (!(await argon2.verify(user.passwordHash, dto.currentPassword))) {
+      throw new BadRequestException(
+        fieldErrorBody(
+          HttpStatus.BAD_REQUEST,
+          'currentPassword',
+          'Mot de passe actuel incorrect.',
+        ),
+      );
+    }
+    if (dto.newPassword === dto.currentPassword) {
+      throw new BadRequestException(
+        fieldErrorBody(
+          HttpStatus.BAD_REQUEST,
+          'newPassword',
+          "Le nouveau mot de passe doit être différent de l'actuel.",
+        ),
+      );
+    }
+
+    await this.usersService.updatePasswordHash(
+      userId,
+      await argon2.hash(dto.newPassword),
+    );
   }
 
   // L'identifiant est un e-mail s'il contient « @ », sinon un numéro de téléphone

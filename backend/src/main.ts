@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
-import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { createValidationPipe } from './common/validation';
 
 async function bootstrap() {
   // Charge backend/.env (s'il existe) avant l'instanciation des modules,
@@ -13,14 +13,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Valide toutes les données reçues selon les règles des DTO (class-validator)
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // supprime les champs non déclarés dans le DTO
-      forbidNonWhitelisted: true, // … et rejette la requête s'il y en a
-      transform: true, // applique les @Transform (normalisation du téléphone, etc.)
-      stopAtFirstError: true, // un seul message d'erreur par champ
-    }),
-  );
+  app.useGlobalPipes(createValidationPipe());
 
   await app.listen(process.env.PORT ?? 3001);
 }
