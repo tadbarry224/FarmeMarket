@@ -3,6 +3,9 @@ const GUINEA_COUNTRY_CODE = '224';
 // Numéro national guinéen : 9 chiffres, commençant par 6 (mobile) ou 3 (fixe).
 const GUINEA_NATIONAL_NUMBER = /^[36]\d{8}$/;
 
+// Format stocké en base, produit par normalizeGuineaPhone.
+export const GUINEA_PHONE_E164 = /^\+224[36]\d{8}$/;
+
 // Séparateurs tolérés à la saisie : espaces, points, tirets, parenthèses.
 const SEPARATORS = /[\s.\-()]/g;
 
