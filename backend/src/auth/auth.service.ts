@@ -15,6 +15,7 @@ import { UsersService } from '../users/users.service';
 import type { ChangePasswordDto } from './dto/change-password.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
+import { EmailVerificationService } from './email-verification.service';
 import type { JwtPayload } from './jwt-payload';
 
 export interface AuthResult {
@@ -35,6 +36,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly emailVerificationService: EmailVerificationService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -75,6 +77,8 @@ export class AuthService {
       }
       throw error;
     }
+
+    await this.emailVerificationService.sendVerification(user);
 
     return this.buildAuthResult(user);
   }

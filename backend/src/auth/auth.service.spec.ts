@@ -9,6 +9,7 @@ import { Role, type User } from '../generated/prisma/client';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import type { RegisterDto } from './dto/register.dto';
+import type { EmailVerificationService } from './email-verification.service';
 
 const PASSWORD = 'motdepasse123';
 
@@ -25,6 +26,7 @@ describe('AuthService', () => {
     >
   >;
   let jwtService: JwtService;
+  let emailVerificationService: { sendVerification: jest.Mock };
   let existingUser: User;
 
   // Données telles qu'elles arrivent après le ValidationPipe (déjà normalisées)
@@ -60,9 +62,11 @@ describe('AuthService', () => {
       updatePasswordHash: jest.fn(),
     };
     jwtService = new JwtService({ secret: 'secret-de-test-uniquement' });
+    emailVerificationService = { sendVerification: jest.fn() };
     authService = new AuthService(
       usersService as unknown as UsersService,
       jwtService,
+      emailVerificationService as unknown as EmailVerificationService,
     );
   });
 
@@ -82,6 +86,16 @@ describe('AuthService', () => {
         sub: 'user-1',
         roles: [Role.PRODUCER],
       });
+    });
+
+    it("déclenche l'envoi du lien de vérification de l'e-mail", async () => {
+      usersService.create.mockResolvedValue(existingUser);
+
+      await authService.register(registerDto);
+
+      expect(emailVerificationService.sendVerification).toHaveBeenCalledWith(
+        existingUser,
+      );
     });
 
     it("ne renvoie jamais l'empreinte du mot de passe", async () => {

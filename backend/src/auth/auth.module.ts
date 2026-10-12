@@ -2,11 +2,16 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { getRequiredEnv } from '../common/env';
+import { MailModule } from '../mail/mail.module';
 import { UsersModule } from '../users/users.module';
+import { AuthMailerService } from './auth-mailer.service';
+import { AuthTokensService } from './auth-tokens.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { EmailVerificationService } from './email-verification.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import { PasswordResetService } from './password-reset.service';
 
 // En dessous, le secret pourrait être deviné par force brute
 const JWT_SECRET_MIN_LENGTH = 32;
@@ -16,6 +21,7 @@ const JWT_EXPIRES_IN_FORMAT = /^\d+[smhd]$/;
 @Module({
   imports: [
     UsersModule,
+    MailModule,
     // Configuré au démarrage : le serveur refuse de démarrer si la configuration JWT est absente ou invalide
     JwtModule.registerAsync({
       useFactory: () => {
@@ -43,6 +49,10 @@ const JWT_EXPIRES_IN_FORMAT = /^\d+[smhd]$/;
   controllers: [AuthController],
   providers: [
     AuthService,
+    AuthTokensService,
+    AuthMailerService,
+    EmailVerificationService,
+    PasswordResetService,
     // Guards globaux, exécutés dans cet ordre sur toutes les routes de l'application :
     // 1. JwtAuthGuard : l'utilisateur est-il connecté ? (sauf routes @Public())
     // 2. RolesGuard   : a-t-il le rôle demandé par @Roles(...) ?
