@@ -1,0 +1,22 @@
+
+services:
+  farmmarket-db:
+    image: postgres:16
+    container_name: farmmarket-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: farmmarket
+      POSTGRES_USER: farmmarket_user
+      POSTGRES_PASSWORD: ${FARMMARKET_DB_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - farmmarket_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U farmmarket_user -d farmmarket"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  farmmarket_postgres_data:

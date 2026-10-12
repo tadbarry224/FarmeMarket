@@ -57,3 +57,12 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Client Prisma généré (recréé par `npx prisma generate`)
+/src/generated/
+
+# Skills d'agents IA installés localement (liens absolus, non portables).
+# skills-lock.json est versionné et permet de les réinstaller.
+/.agents/
+/.claude/skills/
+/.windsurf/
