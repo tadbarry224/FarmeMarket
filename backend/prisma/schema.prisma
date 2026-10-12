@@ -1,4 +1,3 @@
-
 generator client {
   provider     = "prisma-client"
   output       = "../src/generated/prisma"
@@ -7,4 +6,50 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// Rôles d'un compte. Un utilisateur peut en cumuler plusieurs (ex. PRODUCER + BUYER).
+// ADMIN n'est jamais attribuable à l'inscription.
+enum Role {
+  PRODUCER
+  BUYER
+  ADMIN
+}
+
+model User {
+  id              String      @id @default(uuid())
+  fullName        String
+  // Toujours stocké au format international : +224XXXXXXXXX
+  phone           String      @unique
+  // Facultatif, stocké en minuscules
+  email           String?     @unique
+  // Null tant que l'adresse n'a pas été confirmée via le lien envoyé par e-mail
+  emailVerifiedAt DateTime?
+  // Empreinte argon2 : le mot de passe en clair n'est jamais stocké
+  passwordHash    String
+  roles           Role[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  authTokens      AuthToken[]
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+// Jeton à usage unique envoyé par e-mail (confirmation d'adresse, réinitialisation du mot de passe).
+// Seule l'empreinte SHA-256 du jeton est stockée.
+model AuthToken {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      AuthTokenType
+  tokenHash String        @unique
+  expiresAt DateTime
+  // Renseigné dès que le jeton a servi : il devient alors inutilisable
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, type])
 }
