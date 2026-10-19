@@ -171,6 +171,55 @@ Le backend expose une API REST sur `http://localhost:3001`. Les routes protégé
 | `POST` | `/auth/resend-verification` | connecté | Recevoir un nouveau lien de confirmation |
 | `POST` | `/auth/forgot-password` | public | Demander un lien de réinitialisation (adresse vérifiée uniquement) |
 | `POST` | `/auth/reset-password` | public | Choisir un nouveau mot de passe avec le lien reçu |
+| `GET` | `/producers/me` | producteur | Consulter son profil producteur (adresse comprise) |
+| `PUT` | `/producers/me` | producteur | Créer ou remplacer son profil producteur |
+| `GET` | `/producers/:id` | public | Profil public d'un producteur (sans téléphone ni adresse) |
+| `GET` | `/locations` | public | Régions et préfectures de Guinée |
+| `GET` | `/categories` | public | Catégories de produits |
+| `GET` | `/products` | public | Catalogue : recherche, filtres, tri et pagination (voir ci-dessous) |
+| `GET` | `/products/:id` | public | Détail d'un produit (un produit archivé n'est plus visible) |
+| `POST` | `/products` | producteur | Publier un produit (profil producteur requis) |
+| `GET` | `/products/mine` | producteur | Lister ses produits, archivés compris |
+| `PUT` | `/products/:id` | producteur | Modifier un de ses produits (remplacement complet) |
+| `PATCH` | `/products/:id/status` | producteur | Passer un produit en disponible, épuisé ou archivé |
+| `POST` | `/requests` | acheteur | Publier une demande d'achat |
+| `GET` | `/requests/mine` | acheteur | Ses demandes, avec le nombre d'offres reçues |
+| `GET` | `/requests` | producteur | Demandes ouvertes, triées par pertinence (voir ci-dessous) |
+| `GET` | `/requests/:id` | auteur ou producteur | Détail : avec les offres reçues pour l'auteur, avec sa propre offre pour un producteur |
+| `PUT` | `/requests/:id` | acheteur | Modifier sa demande, tant qu'elle n'a reçu aucune offre |
+| `PATCH` | `/requests/:id/status` | acheteur | Fermer sa demande (`{ "status": "CLOSED" }`) |
+| `POST` | `/requests/:id/offers` | producteur | Faire une offre (une seule par demande, renouvelable après retrait) |
+| `GET` | `/offers/mine` | producteur | Ses offres et leur statut |
+| `PUT` | `/offers/:id` | producteur | Modifier son offre tant qu'elle est en attente |
+| `PATCH` | `/offers/:id/status` | producteur ou acheteur | Retirer son offre (`WITHDRAWN`) ou refuser une offre reçue (`REJECTED`) |
+
+Le catalogue (`GET /products`) n'affiche que les produits **disponibles** dont la période de disponibilité n'est pas terminée. Paramètres, tous facultatifs :
+
+| Paramètre | Exemple | Effet |
+|---|---|---|
+| `q` | `riz` | Recherche dans le nom et la description (majuscules ignorées) |
+| `categoryId` | `7b0e…` | Une catégorie (identifiant renvoyé par `/categories`) |
+| `region`, `prefecture` | `Kindia`, `Coyah` | Localisation du produit (noms renvoyés par `/locations`) |
+| `minPrice`, `maxPrice` | `5000` | Prix par unité, en GNF |
+| `minQuantity` | `500` | Quantité disponible minimale, dans l'unité du produit |
+| `availableOn` | `2026-12-01` | Produits disponibles à cette date |
+| `sort` | `price_asc` | `recent` (par défaut), `price_asc`, `price_desc` ou `quantity_desc` |
+| `page`, `pageSize` | `2`, `20` | Pagination (20 par page par défaut, 50 au maximum) |
+
+Réponse : `{ "items": [...], "total": 42, "page": 2, "pageSize": 20 }`.
+
+Les demandes d'achat ne sont visibles que par leur auteur et par les producteurs, jamais par le public. Le téléphone de l'acheteur n'est pas communiqué, et un producteur ne voit pas les offres de ses concurrents. La liste des demandes (`GET /requests`) n'affiche que les demandes ouvertes dont la date souhaitée n'est pas passée. Elle accepte les paramètres `categoryId`, `region` (lieu de livraison), `sort` (`relevance` par défaut, ou `recent`), `page` et `pageSize`.
+
+Chaque demande y reçoit un **score de pertinence** sur 100 (`match.score`), calculé à partir des produits disponibles du producteur. C'est le score de son meilleur produit (`match.productId`) :
+
+| Critère | Points |
+|---|---|
+| Même catégorie (sans elle, le score est 0) | 30 |
+| Le nom du produit correspond (sans tenir compte des accents ni du pluriel) | 20 |
+| Quantité suffisante, dans la même unité | 15 |
+| Prix dans le budget (ou budget non précisé) | 15 |
+| Produit dans la préfecture de livraison (10) ou au moins dans la même région (5) | 10 |
+| Disponible à la date souhaitée (ou date non précisée) | 10 |
 
 Les erreurs liées à un formulaire indiquent le champ concerné :
 
@@ -198,6 +247,12 @@ FarmMarket/
 │   ├── src/
 │   │   ├── auth/               # Inscription, connexion, JWT, rôles, e-mails de compte
 │   │   ├── users/              # Profil utilisateur
+│   │   ├── producers/          # Profil producteur
+│   │   ├── locations/          # Régions et préfectures de Guinée
+│   │   ├── categories/         # Catégories de produits
+│   │   ├── products/           # Annonces des producteurs et catalogue public
+│   │   ├── requests/           # Demandes d'achat et matching
+│   │   ├── offers/             # Offres des producteurs en réponse aux demandes
 │   │   ├── mail/               # Envoi des e-mails (console en développement, SMTP en production)
 │   │   ├── prisma/             # Connexion à la base de données
 │   │   ├── common/             # Utilitaires partagés (téléphone, validation, configuration)
@@ -216,7 +271,8 @@ Le backend est organisé **par domaine** (un module NestJS par domaine métier),
 |---|---|---|
 | 1. Fondations | Git, Next.js, NestJS, PostgreSQL, Docker, Prisma | ✅ Terminée |
 | 2. Authentification | Comptes, rôles, JWT, vérification de l'e-mail, mot de passe oublié | ✅ Terminée |
-| 3. Marketplace | Producteurs, produits, catégories, catalogue, recherche | ⏳ À venir |
-| 4 à 9 | Demandes, commandes, logistique, traçabilité, statistiques, intelligence | ⏳ À venir |
+| 3. Marketplace | Producteurs, produits, catégories, catalogue, recherche | 🚧 En cours (API terminée, photos à venir) |
+| 4. Demandes | Demandes d'achat, offres des producteurs, matching par règles simples | ✅ API terminée (l'acceptation d'une offre viendra avec les commandes) |
+| 5 à 9 | Commandes, logistique, traçabilité, statistiques, intelligence | ⏳ À venir |
 
 Le détail de chaque phase figure dans le [cahier des charges](docs/cahier-des-charges.md#26-roadmap).

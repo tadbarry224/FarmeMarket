@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { Prisma, type User } from '../generated/prisma/client';
+import type { User } from '../generated/prisma/client';
 import { normalizeGuineaPhone } from '../common/phone';
+import { isUniqueConstraintError } from '../common/prisma-errors';
 import { fieldErrorBody } from '../common/validation';
 import { type PublicUser, toPublicUser } from '../users/public-user';
 import { UsersService } from '../users/users.service';
@@ -151,11 +152,4 @@ export class AuthService {
       user: toPublicUser(user),
     };
   }
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === 'P2002'
-  );
 }

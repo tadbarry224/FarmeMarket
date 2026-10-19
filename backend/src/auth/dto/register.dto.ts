@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { Role } from '../../generated/prisma/client';
 import { GUINEA_PHONE_E164, normalizeGuineaPhone } from '../../common/phone';
+import { trim } from '../../common/transforms';
 
 // Rôles qu'un utilisateur peut choisir lui-même. ADMIN n'est jamais attribuable à l'inscription.
 export const SELF_ASSIGNABLE_ROLES: Role[] = [Role.PRODUCER, Role.BUYER];
@@ -21,9 +22,6 @@ export const SELF_ASSIGNABLE_ROLES: Role[] = [Role.PRODUCER, Role.BUYER];
 export const PASSWORD_MIN_LENGTH = 8;
 // Limite haute : évite qu'un mot de passe gigantesque ralentisse volontairement le serveur
 export const PASSWORD_MAX_LENGTH = 128;
-
-const trim = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.trim() : value;
 
 // ⚠ class-validator exécute les décorateurs de BAS en HAUT, et le ValidationPipe s'arrête
 // à la première erreur par champ. La vérification de présence (« … est obligatoire »)

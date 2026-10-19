@@ -17,20 +17,24 @@ enum Role {
 }
 
 model User {
-  id              String      @id @default(uuid())
-  fullName        String
+  id               String            @id @default(uuid())
+  fullName         String
   // Toujours stocké au format international : +224XXXXXXXXX
-  phone           String      @unique
+  phone            String            @unique
   // Facultatif, stocké en minuscules
-  email           String?     @unique
+  email            String?           @unique
   // Null tant que l'adresse n'a pas été confirmée via le lien envoyé par e-mail
-  emailVerifiedAt DateTime?
+  emailVerifiedAt  DateTime?
   // Empreinte argon2 : le mot de passe en clair n'est jamais stocké
-  passwordHash    String
-  roles           Role[]
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  authTokens      AuthToken[]
+  passwordHash     String
+  roles            Role[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  authTokens       AuthToken[]
+  // Renseigné quand un utilisateur ayant le rôle PRODUCER complète son profil producteur
+  producer         Producer?
+  // Demandes d'achat publiées en tant qu'acheteur
+  purchaseRequests PurchaseRequest[]
 }
 
 enum AuthTokenType {
@@ -52,4 +56,174 @@ model AuthToken {
   createdAt DateTime      @default(now())
 
   @@index([userId, type])
+}
+
+// Type d'exploitation déclaré par le producteur
+enum FarmType {
+  CROPS // cultures
+  LIVESTOCK // élevage
+  MIXED // cultures et élevage
+  OTHER
+}
+
+// Profil public d'un producteur. Le nom et le téléphone sont ceux du compte (User).
+// La région et la préfecture sont validées contre la liste officielle (src/locations/guinea-locations.ts).
+model Producer {
+  id           String    @id @default(uuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  farmType     FarmType
+  description  String?
+  region       String
+  prefecture   String
+  commune      String?
+  // Adresse précise : visible uniquement par le producteur lui-même
+  address      String?
+  // Texte libre, ex. « Riz, maïs, arachide »
+  mainProducts String?
+  products     Product[]
+  offers       Offer[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([region, prefecture])
+}
+
+// Catégorie de produits (Céréales, Légumes…). Les catégories initiales sont créées
+// par la migration add_categories ; leur gestion par l'administrateur viendra plus tard.
+model Category {
+  id               String            @id @default(uuid())
+  name             String            @unique
+  // Exemples affichés pour aider le producteur à choisir, ex. « Riz, maïs, fonio »
+  description      String?
+  createdAt        DateTime          @default(now())
+  products         Product[]
+  purchaseRequests PurchaseRequest[]
+}
+
+// Unité de vente d'un produit (le prix est exprimé par unité)
+enum ProductUnit {
+  KG
+  TONNE
+  BAG // sac
+  CRATE // caisse, cageot
+  BUNCH // botte, régime
+  PIECE
+  HEAD // tête de bétail
+  LITER
+}
+
+enum ProductStatus {
+  AVAILABLE // visible dans le catalogue
+  SOLD_OUT // épuisé : reste consultable mais ne peut plus être commandé
+  ARCHIVED // retiré par le producteur : n'apparaît plus dans le catalogue
+}
+
+// Annonce publiée par un producteur.
+// Un produit n'est jamais supprimé, il est archivé : les futures commandes devront pouvoir y faire référence.
+model Product {
+  id             String        @id @default(uuid())
+  producerId     String
+  producer       Producer      @relation(fields: [producerId], references: [id], onDelete: Cascade)
+  categoryId     String
+  category       Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name           String
+  description    String?
+  // Nombre entier d'unités : pour vendre 1,5 tonne, choisir l'unité KG (1 500 kg)
+  quantity       Int
+  unit           ProductUnit
+  // Prix en francs guinéens (GNF) par unité. Le GNF n'a pas de décimales.
+  pricePerUnit   Int
+  // Localisation du produit, validée comme celle du producteur
+  region         String
+  prefecture     String
+  commune        String?
+  // Période de disponibilité (dates sans heure), facultative
+  availableFrom  DateTime?     @db.Date
+  availableUntil DateTime?     @db.Date
+  // Texte libre, ex. « Premier choix », « Bio »
+  quality        String?
+  // Texte libre, ex. « Sacs de 50 kg »
+  packaging      String?
+  status         ProductStatus @default(AVAILABLE)
+  // Offres dans lesquelles le producteur a proposé ce produit
+  offers         Offer[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([producerId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([region, prefecture])
+}
+
+enum PurchaseRequestStatus {
+  OPEN // visible par les producteurs, accepte des offres
+  FULFILLED // une offre a été acceptée (phase 5 : commandes)
+  CLOSED // fermée par l'acheteur
+}
+
+// Demande d'achat publiée par un acheteur (cahier des charges §8),
+// ex. « 2 tonnes de tomates, 15 000 GNF/kg maximum, livraison à Conakry le 20 novembre ».
+// Nommée PurchaseRequest plutôt que Request pour ne pas la confondre avec la requête HTTP d'Express.
+model PurchaseRequest {
+  id              String                @id @default(uuid())
+  buyerId         String
+  buyer           User                  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        Category              @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  // Produit recherché, en texte libre (ex. « Tomates »)
+  productName     String
+  quantity        Int
+  unit            ProductUnit
+  // Budget maximum en GNF par unité, facultatif
+  maxPricePerUnit Int?
+  // Lieu de livraison, validé comme la localisation d'un produit
+  region          String
+  prefecture      String
+  commune         String?
+  // Date de livraison souhaitée : une fois passée, la demande n'est plus proposée aux producteurs
+  desiredDate     DateTime?             @db.Date
+  quality         String?
+  details         String?
+  status          PurchaseRequestStatus @default(OPEN)
+  offers          Offer[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([buyerId])
+  @@index([status])
+  @@index([categoryId])
+}
+
+enum OfferStatus {
+  PENDING // en attente de la décision de l'acheteur
+  ACCEPTED // acceptée par l'acheteur (phase 5 : crée une commande)
+  REJECTED // refusée par l'acheteur
+  WITHDRAWN // retirée par le producteur
+}
+
+// Réponse d'un producteur à une demande d'achat. Une seule offre par producteur et par demande.
+model Offer {
+  id            String          @id @default(uuid())
+  requestId     String
+  request       PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  producerId    String
+  producer      Producer        @relation(fields: [producerId], references: [id], onDelete: Cascade)
+  // Produit du catalogue proposé, facultatif
+  productId     String?
+  product       Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  // Exprimée dans l'unité de la demande, pour pouvoir comparer les offres
+  quantity      Int
+  // Prix en GNF par unité de la demande
+  pricePerUnit  Int
+  // Date à partir de laquelle le producteur peut livrer, facultative
+  availableFrom DateTime?       @db.Date
+  message       String?
+  status        OfferStatus     @default(PENDING)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([requestId, producerId])
+  @@index([producerId])
 }
