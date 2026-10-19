@@ -35,6 +35,10 @@ model User {
   producer         Producer?
   // Demandes d'achat publiées en tant qu'acheteur
   purchaseRequests PurchaseRequest[]
+  // Commandes passées en tant qu'acheteur
+  orders           Order[]
+  // Changements de statut de commande effectués par cet utilisateur
+  orderEvents      OrderEvent[]
 }
 
 enum AuthTokenType {
@@ -83,6 +87,8 @@ model Producer {
   mainProducts String?
   products     Product[]
   offers       Offer[]
+  // Commandes reçues (ventes)
+  orders       Order[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -148,6 +154,8 @@ model Product {
   status         ProductStatus @default(AVAILABLE)
   // Offres dans lesquelles le producteur a proposé ce produit
   offers         Offer[]
+  // Lignes de commande portant sur ce produit
+  orderItems     OrderItem[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -221,9 +229,94 @@ model Offer {
   availableFrom DateTime?       @db.Date
   message       String?
   status        OfferStatus     @default(PENDING)
+  // Commande créée quand l'acheteur accepte l'offre
+  order         Order?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
   @@unique([requestId, producerId])
   @@index([producerId])
+}
+
+// Cycle de vie d'une commande (cahier des charges §10) :
+// PENDING → ACCEPTED → PREPARING → SHIPPED → DELIVERED → COMPLETED,
+// avec REJECTED (refusée par le producteur) et CANCELLED (annulée).
+// Qui peut faire quel changement : src/orders/order-transitions.ts
+enum OrderStatus {
+  PENDING // en attente de l'accord du producteur (commande depuis le catalogue)
+  ACCEPTED // acceptée par le producteur, ou issue d'une offre acceptée par l'acheteur
+  PREPARING // en préparation
+  SHIPPED // expédiée
+  DELIVERED // livrée, selon le producteur
+  COMPLETED // réception confirmée par l'acheteur
+  REJECTED // refusée par le producteur
+  CANCELLED // annulée par l'acheteur ou le producteur
+}
+
+// Commande d'un acheteur auprès d'un producteur.
+// Pas de suppression en cascade : l'historique des commandes doit être conservé.
+model Order {
+  id                 String       @id @default(uuid())
+  buyerId            String
+  buyer              User         @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  producerId         String
+  producer           Producer     @relation(fields: [producerId], references: [id], onDelete: Restrict)
+  // Renseigné quand la commande vient d'une offre acceptée
+  offerId            String?      @unique
+  offer              Offer?       @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  status             OrderStatus
+  // Somme des lignes, en GNF. BigInt : prix × quantité peut dépasser la capacité d'un Int.
+  totalAmount        BigInt
+  deliveryRegion     String
+  deliveryPrefecture String
+  deliveryCommune    String?
+  deliveryAddress    String
+  // Date de livraison prévue, facultative
+  deliveryDate       DateTime?    @db.Date
+  // Message de l'acheteur au producteur
+  note               String?
+  // Vrai quand la quantité commandée a été retirée du stock du produit (commande du catalogue
+  // acceptée) : elle y est remise si la commande est annulée.
+  stockReserved      Boolean      @default(false)
+  items              OrderItem[]
+  events             OrderEvent[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([buyerId, createdAt])
+  @@index([producerId, createdAt])
+}
+
+// Ligne d'une commande. Nom, unité et prix sont copiés au moment de la commande :
+// une modification ultérieure du produit ne change pas la commande.
+model OrderItem {
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName String
+  unit        ProductUnit
+  // Prix en GNF par unité
+  unitPrice   Int
+  quantity    Int
+  lineTotal   BigInt
+
+  @@index([orderId])
+}
+
+// Historique d'une commande : un enregistrement par changement de statut (§10).
+model OrderEvent {
+  id        String      @id @default(uuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  // Utilisateur à l'origine du changement
+  actorId   String?
+  actor     User?       @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  // Motif d'une annulation ou d'un refus, précision facultative sinon
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId, createdAt])
 }

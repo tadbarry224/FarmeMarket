@@ -192,6 +192,27 @@ Le backend expose une API REST sur `http://localhost:3001`. Les routes protégé
 | `GET` | `/offers/mine` | producteur | Ses offres et leur statut |
 | `PUT` | `/offers/:id` | producteur | Modifier son offre tant qu'elle est en attente |
 | `PATCH` | `/offers/:id/status` | producteur ou acheteur | Retirer son offre (`WITHDRAWN`) ou refuser une offre reçue (`REJECTED`) |
+| `POST` | `/offers/:id/accept` | acheteur | Accepter une offre : crée la commande, satisfait la demande, refuse les autres offres |
+| `POST` | `/orders` | acheteur | Commander un produit du catalogue (en attente de l'accord du producteur) |
+| `GET` | `/orders/purchases` | acheteur | Historique de ses achats (`?status=`, pagination) |
+| `GET` | `/orders/sales` | producteur | Historique de ses ventes (`?status=`, pagination) |
+| `GET` | `/orders/:id` | acheteur ou producteur de la commande | Détail et historique des statuts |
+| `PATCH` | `/orders/:id/status` | acheteur ou producteur de la commande | Faire avancer, refuser ou annuler une commande |
+
+Cycle de vie d'une commande :
+
+```
+PENDING → ACCEPTED → PREPARING → SHIPPED → DELIVERED → COMPLETED
+   ↓          ↓           ↓
+REJECTED   CANCELLED   CANCELLED
+```
+
+- le producteur accepte ou refuse, puis fait avancer la commande jusqu'à `DELIVERED` ; l'acheteur confirme la réception (`COMPLETED`) ;
+- l'acheteur peut annuler tant que la préparation n'a pas commencé ; le producteur jusqu'à l'expédition, avec un motif obligatoire ;
+- une commande du catalogue retire sa quantité du stock à l'acceptation et l'y remet si elle est annulée ; une commande issue d'une offre ne touche pas au stock ;
+- les deux parties voient le téléphone de l'autre une fois la commande acceptée, et seulement tant qu'elle n'est ni refusée ni annulée.
+
+Règles complètes : [`src/orders/order-transitions.ts`](backend/src/orders/order-transitions.ts).
 
 Le catalogue (`GET /products`) n'affiche que les produits **disponibles** dont la période de disponibilité n'est pas terminée. Paramètres, tous facultatifs :
 
@@ -253,6 +274,7 @@ FarmMarket/
 │   │   ├── products/           # Annonces des producteurs et catalogue public
 │   │   ├── requests/           # Demandes d'achat et matching
 │   │   ├── offers/             # Offres des producteurs en réponse aux demandes
+│   │   ├── orders/             # Commandes, statuts, stock et historique
 │   │   ├── mail/               # Envoi des e-mails (console en développement, SMTP en production)
 │   │   ├── prisma/             # Connexion à la base de données
 │   │   ├── common/             # Utilitaires partagés (téléphone, validation, configuration)
@@ -272,7 +294,8 @@ Le backend est organisé **par domaine** (un module NestJS par domaine métier),
 | 1. Fondations | Git, Next.js, NestJS, PostgreSQL, Docker, Prisma | ✅ Terminée |
 | 2. Authentification | Comptes, rôles, JWT, vérification de l'e-mail, mot de passe oublié | ✅ Terminée |
 | 3. Marketplace | Producteurs, produits, catégories, catalogue, recherche | 🚧 En cours (API terminée, photos à venir) |
-| 4. Demandes | Demandes d'achat, offres des producteurs, matching par règles simples | ✅ API terminée (l'acceptation d'une offre viendra avec les commandes) |
-| 5 à 9 | Commandes, logistique, traçabilité, statistiques, intelligence | ⏳ À venir |
+| 4. Demandes | Demandes d'achat, offres des producteurs, matching par règles simples | ✅ API terminée |
+| 5. Commandes | Commande depuis le catalogue ou une offre, statuts, stock, historique | ✅ API terminée |
+| 6 à 9 | Logistique, traçabilité, statistiques, intelligence | ⏳ À venir |
 
 Le détail de chaque phase figure dans le [cahier des charges](docs/cahier-des-charges.md#26-roadmap).

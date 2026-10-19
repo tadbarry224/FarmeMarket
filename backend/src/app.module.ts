@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { LocationsModule } from './locations/locations.module';
 import { OffersModule } from './offers/offers.module';
+import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { ProducersModule } from './producers/producers.module';
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module';
     ProductsModule,
     RequestsModule,
     OffersModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

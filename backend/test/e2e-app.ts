@@ -51,5 +51,5 @@ export async function createE2eApp(): Promise<E2eContext> {
 
 // Vide toutes les tables : chaque test part d'une base vierge
 export async function resetDatabase(prisma: PrismaService): Promise<void> {
-  await prisma.$executeRaw`TRUNCATE TABLE "Offer", "PurchaseRequest", "Product", "Producer", "AuthToken", "User" CASCADE`;
+  await prisma.$executeRaw`TRUNCATE TABLE "OrderEvent", "OrderItem", "Order", "Offer", "PurchaseRequest", "Product", "Producer", "AuthToken", "User" CASCADE`;
 }
