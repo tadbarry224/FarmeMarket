@@ -27,7 +27,7 @@ Le périmètre complet, le MVP et la feuille de route sont décrits dans le [cah
 | Base de données | PostgreSQL 16 (Docker) |
 | ORM | Prisma 7 |
 | Authentification | JWT, mots de passe hachés avec argon2 |
-| Tests | Jest, Supertest |
+| Tests | Jest, Supertest (backend), Testing Library (frontend) |
 
 ## Prérequis
 
@@ -53,7 +53,7 @@ npm install
 
 ## Configuration
 
-Trois fichiers de configuration sont nécessaires. **Ils contiennent des secrets et ne doivent jamais être commités** (ils sont ignorés par Git).
+Quatre fichiers de configuration sont nécessaires. **Ils contiennent des secrets et ne doivent jamais être commités** (ils sont ignorés par Git).
 
 ### 1. `.env` (racine) — mot de passe PostgreSQL
 
@@ -95,6 +95,16 @@ cp backend/.env.test.example backend/.env.test
 ```
 
 Même principe que `backend/.env`, mais avec la base **`farmmarket_test`** et un secret JWT **différent**. Cette base est vidée avant chaque test : les tests refusent de s'exécuter si le nom de la base ne se termine pas par `_test`.
+
+### 4. `frontend/.env.local` — configuration du frontend
+
+```bash
+cp frontend/.env.example frontend/.env.local
+```
+
+| Variable | Description |
+|---|---|
+| `API_URL` | Adresse de l'API (`http://localhost:3001`). Lue uniquement par le serveur Next.js : le navigateur ne parle jamais directement à l'API. |
 
 ## Lancement
 
@@ -147,6 +157,10 @@ cd frontend
 npm run dev   # http://localhost:3000
 ```
 
+> Le port 3000 doit être libre. Si un autre projet l'utilise déjà, lancer `npm run dev -- -p 3002` et mettre à jour `FRONTEND_URL` dans `backend/.env` (liens des e-mails).
+
+La connexion est conservée dans un cookie `httpOnly` : le jeton n'est jamais accessible au JavaScript du navigateur. Toutes les données passent par le serveur Next.js, qui appelle l'API.
+
 ## Tests
 
 ```bash
@@ -155,6 +169,12 @@ npm test           # tests unitaires (sans base de données)
 npm run test:e2e   # tests e2e : parcours complets sur la base farmmarket_test (Docker doit tourner)
 npm run lint       # analyse du code
 npm run build      # vérification de la compilation TypeScript
+
+cd ../frontend
+npm test           # tests des composants et des fonctions
+npm run lint       # analyse du code
+npm run typecheck  # vérification des types
+npm run build      # compilation de production
 ```
 
 ## API
@@ -282,7 +302,11 @@ FarmMarket/
 │   │   └── main.ts             # Point d'entrée
 │   └── test/                   # Tests e2e
 └── frontend/                   # Application Next.js
-    └── src/app/
+    └── src/
+        ├── app/                # Pages (une route par dossier) et Server Actions
+        ├── components/         # Composants d'interface (champs, boutons, en-tête…)
+        ├── lib/                # Appels à l'API, session, utilitaires
+        └── proxy.ts            # Redirige vers la connexion les pages réservées
 ```
 
 Le backend est organisé **par domaine** (un module NestJS par domaine métier), conformément au cahier des charges.
@@ -296,6 +320,7 @@ Le backend est organisé **par domaine** (un module NestJS par domaine métier),
 | 3. Marketplace | Producteurs, produits, catégories, catalogue, recherche | 🚧 En cours (API terminée, photos à venir) |
 | 4. Demandes | Demandes d'achat, offres des producteurs, matching par règles simples | ✅ API terminée |
 | 5. Commandes | Commande depuis le catalogue ou une offre, statuts, stock, historique | ✅ API terminée |
+| Frontend | Compte : inscription, connexion, profil, mot de passe, e-mails | 🚧 En cours (catalogue, espace producteur, demandes et commandes à venir) |
 | 6 à 9 | Logistique, traçabilité, statistiques, intelligence | ⏳ À venir |
 
 Le détail de chaque phase figure dans le [cahier des charges](docs/cahier-des-charges.md#26-roadmap).
